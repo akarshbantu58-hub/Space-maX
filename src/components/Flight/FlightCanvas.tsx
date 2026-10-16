@@ -19,6 +19,9 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [launchStatus, setLaunchStatus] = useState('READY');
+  const [effectsEnabled, setEffectsEnabled] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(false);
+  const audioRef = useRef<AudioContext | null>(null);
   const stateRef = useRef(flightState);
   stateRef.current = flightState;
 
@@ -242,14 +245,40 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
         ctx.stroke();
       });
 
-      // Thruster Flame Particle Effect
-      if (state.throttle > 0 && !state.landed) {
-        ctx.fillStyle = '#f97316';
-        ctx.beginPath();
-        ctx.moveTo(-10, 20);
-        ctx.lineTo(0, 20 + Math.random() * 40 * state.throttle);
-        ctx.lineTo(10, 20);
-        ctx.fill();
+      // Layered engine plume, glow and turbulent exhaust particles.
+      if (effectsEnabled && state.throttle > 0 && !state.landed && !state.crashed) {
+        const power = Math.max(0, Math.min(1, state.throttle));
+        const flicker = 0.82 + Math.sin(state.flightTime * 29) * 0.12 + Math.sin(state.flightTime * 47) * 0.06;
+        const plumeLength = (34 + 74 * power) * flicker;
+        const glow = ctx.createRadialGradient(0, 24, 2, 0, 42, 30 + power * 22);
+        glow.addColorStop(0, 'rgba(255,255,220,.95)');
+        glow.addColorStop(.25, 'rgba(80,210,255,.72)');
+        glow.addColorStop(1, 'rgba(30,100,255,0)');
+        ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(0, 42, 30 + power * 22, 0, Math.PI * 2); ctx.fill();
+        const plume = ctx.createLinearGradient(0, 18, 0, 18 + plumeLength);
+        plume.addColorStop(0, 'rgba(255,255,235,.98)');
+        plume.addColorStop(.22, 'rgba(90,220,255,.9)');
+        plume.addColorStop(.58, 'rgba(45,125,255,.58)');
+        plume.addColorStop(1, 'rgba(35,75,180,0)');
+        ctx.fillStyle = plume;
+        ctx.beginPath(); ctx.moveTo(-5, 19); ctx.quadraticCurveTo(-12, 38, -7, 18 + plumeLength * .62);
+        ctx.quadraticCurveTo(0, 27 + plumeLength * flicker, 7, 18 + plumeLength * .62);
+        ctx.quadraticCurveTo(12, 38, 5, 19); ctx.closePath(); ctx.fill();
+        for (let i = 0; i < 9; i++) {
+          const seed = state.flightTime * (14 + i * 2) + i * 31;
+          const x = Math.sin(seed * 1.7) * (3 + i * 1.2);
+          const y = 25 + ((seed * 19) % Math.max(1, plumeLength));
+          ctx.fillStyle = i % 2 ? 'rgba(255,190,90,.75)' : 'rgba(130,230,255,.8)';
+          ctx.beginPath(); ctx.arc(x, y, 1 + (i % 3), 0, Math.PI * 2); ctx.fill();
+        }
+        // Atmospheric smoke is only drawn inside the atmosphere.
+        if (altitude < currentBody.atmosphereHeight) {
+          for (let i = 0; i < 5; i++) {
+            const t = (state.flightTime * 7 + i * 23) % 90;
+            ctx.fillStyle = 'rgba(180,195,210,' + (0.04 + power * .07) + ')';
+            ctx.beginPath(); ctx.ellipse(Math.sin(t) * (8 + t * .35), 34 + t, 5 + t * .12, 3 + t * .1, 0, 0, Math.PI * 2); ctx.fill();
+          }
+        }
       }
 
       ctx.restore();
@@ -266,9 +295,39 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
     };
   }, [parts]);
 
+  const toggleSound = () => {
+    if (soundEnabled) {
+      audioRef.current?.close();
+      audioRef.current = null;
+      setSoundEnabled(false);
+      return;
+    }
+    const AudioContextCtor = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextCtor) return;
+    const audio = new AudioContextCtor();
+    const oscillator = audio.createOscillator();
+    const gain = audio.createGain();
+    oscillator.type = 'sawtooth';
+    oscillator.frequency.value = 58;
+    gain.gain.value = 0.018;
+    oscillator.connect(gain); gain.connect(audio.destination); oscillator.start();
+    audioRef.current = audio;
+    setSoundEnabled(true);
+  };
+
+  useEffect(() => () => { audioRef.current?.close(); }, []);
+
   return (
     <div className="relative flex-1 h-full bg-slate-950 overflow-hidden">
       <canvas ref={canvasRef} className="w-full h-full" />
+      <div className="absolute bottom-4 right-4 flex gap-2">
+        <button type="button" onClick={() => setEffectsEnabled(v => !v)} className="rounded-lg border border-cyan-300/30 bg-slate-950/85 px-3 py-2 text-xs text-cyan-100">
+          FX {effectsEnabled ? 'ON' : 'OFF'}
+        </button>
+        <button type="button" onClick={toggleSound} className="rounded-lg border border-white/20 bg-slate-950/85 px-3 py-2 text-xs text-white">
+          SOUND {soundEnabled ? 'ON' : 'OFF'}
+        </button>
+      </div>
     </div>
   );
 };
