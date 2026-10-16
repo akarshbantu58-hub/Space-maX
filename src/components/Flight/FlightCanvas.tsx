@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { FlightState, PlacedPart } from '../../types';
 import { getBodyById, G } from '../../data/solarSystem';
 import { PARTS_CATALOG } from '../../data/partsCatalog';
@@ -7,15 +7,18 @@ import { updateThrusterSound, playExplosionSound, playSuccessSound } from '../..
 interface FlightCanvasProps {
   flightState: FlightState;
   setFlightState: React.Dispatch<React.SetStateAction<FlightState>>;
+  setPartsForFuel?: React.Dispatch<React.SetStateAction<PlacedPart[]>>;
   parts: PlacedPart[];
 }
 
 export const FlightCanvas: React.FC<FlightCanvasProps> = ({
   flightState,
   setFlightState,
-  parts
+  parts,
+  setPartsForFuel
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [launchStatus, setLaunchStatus] = useState('READY');
   const stateRef = useRef(flightState);
   stateRef.current = flightState;
 
@@ -32,12 +35,16 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
 
       const state = stateRef.current;
       if (state.crashed || state.destroyed) {
+        setLaunchStatus(state.destroyed ? 'VEHICLE LOST' : 'FLIGHT TERMINATED');
         updateThrusterSound(false, 0);
         animationId = requestAnimationFrame(updatePhysics);
         return;
       }
 
-      const dt = Math.min(0.1, dtReal) * state.timeWarp;
+      const dt = Math.min(0.05, dtReal) * state.timeWarp;
+      if (state.landed) setLaunchStatus('PAD / SURFACE');
+      else if (state.crashed) setLaunchStatus('IMPACT');
+      else setLaunchStatus(altitude > currentBody.atmosphereHeight ? 'SPACE FLIGHT' : 'ATMOSPHERIC FLIGHT');
       const currentBody = getBodyById(state.currentBodyId);
 
       // Part mass and fuel are stored in metric tons; physics forces use SI units.
@@ -61,11 +68,21 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
       let ayThrust = 0;
       const activeThrust = parts.reduce((sum, p) => {
         const def = getPartDef(p.definitionId);
-        return sum + (def?.thrust || 0);
+        // Only engines assigned to the currently active stage can produce thrust.
+        return sum + (def?.category === 'engines' && (p.stage || 1) <= state.activeStage ? (def?.thrust || 0) : 0);
       }, 0);
 
-      if (state.throttle > 0 && activeThrust > 0 && !state.landed) {
-        const thrustForce = activeThrust * 1000 * state.throttle; // Newtons
+      // Consume propellant from fuel tanks while engines are firing.
+      const firing = state.throttle > 0 && activeThrust > 0 && !state.landed;
+      const totalFuel = parts.reduce((sum, p) => {
+        const def = getPartDef(p.definitionId);
+        return sum + (def?.category === 'fuel' ? Math.max(0, p.fuel || 0) : 0);
+      }, 0);
+      const effectiveThrust = totalFuel <= 0 ? 0 : activeThrust;
+
+
+      if (firing && effectiveThrust > 0 && totalFuel > 0) {
+        const thrustForce = effectiveThrust * 1000 * state.throttle; // Newtons
         const accel = thrustForce / totalMassKg;
         // Direction vector from rocket angle (pointing up relative to planet surface or heading)
         axThrust = Math.sin(state.angle) * accel;
@@ -124,7 +141,17 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
         }
       }
 
-      setFlightState(prev => ({
+      setFlightState(prev => {
+        let fuelRemainingToBurn = firing ? Math.min(totalFuel, activeThrust * 1000 * state.throttle * dt / (Math.max(1, parts.reduce((sum, p) => { const d = getPartDef(p.definitionId); return sum + (d?.category === 'engines' ? (d.isp || 250) * 9.80665 : 0); }, 0)))) : 0;
+        const updatedParts = parts.map(p => {
+          const def = getPartDef(p.definitionId);
+          if (def?.category !== 'fuel' || fuelRemainingToBurn <= 0) return p;
+          const burn = Math.min(Math.max(0, p.fuel || 0), fuelRemainingToBurn);
+          fuelRemainingToBurn -= burn;
+          return { ...p, fuel: Math.max(0, (p.fuel || 0) - burn) };
+        });
+        if (firing && totalFuel > 0 && updatedParts.some((p, i) => p.fuel !== parts[i]?.fuel)) setPartsForFuel?.(updatedParts);
+        return ({
         ...prev,
         x: newX,
         y: newY,
@@ -135,7 +162,7 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
         maxAltitude: Math.max(prev.maxAltitude, newAlt),
         maxSpeed: Math.max(prev.maxSpeed, Math.sqrt(newVx * newVx + newVy * newVy)),
         flightTime: prev.flightTime + dtReal
-      }));
+      }); });
 
       animationId = requestAnimationFrame(updatePhysics);
     };
@@ -169,6 +196,16 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2 + 150;
       const zoom = 0.5; // pixels per meter scaling for flight view
+
+      // Flight telemetry overlay.
+      ctx.save();
+      ctx.fillStyle = 'rgba(3, 7, 18, 0.78)'; ctx.fillRect(14, 14, 205, 76);
+      ctx.strokeStyle = 'rgba(34,211,238,.55)'; ctx.strokeRect(14, 14, 205, 76);
+      ctx.fillStyle = '#67e8f9'; ctx.font = 'bold 12px monospace'; ctx.fillText('SPACEMAX / FLIGHT', 25, 33);
+      ctx.fillStyle = '#e2e8f0'; ctx.font = '11px monospace'; ctx.fillText(launchStatus, 25, 51);
+      ctx.fillText('STAGE ' + state.activeStage + '  THR ' + Math.round(state.throttle * 100) + '%', 25, 69);
+      ctx.fillText('T+' + state.flightTime.toFixed(1) + 's', 25, 83);
+      ctx.restore();
 
       // Draw Planet Horizon & Body
       ctx.save();
