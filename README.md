@@ -26,24 +26,26 @@ npm run build
 npm run preview
 ```
 
-## Project status and limitations
+## Project status and audit findings
 
 This is a prototype, not a validated orbital mechanics simulator. Flight physics, staging, orbital-map rendering, and mission completion need functional testing and calibration before being treated as physically accurate.
 
-- Blueprint saves use browser `localStorage`; they are local to that browser/profile and are not cloud-synced.
-- The current build canvas uses mouse events; touch-first/mobile controls have not been verified.
+- **Staging order needs correction:** launch initializes `activeStage` to the highest stage number and activation removes that stage. In the default hopper preset, stage 2 contains the capsule and parachute while stage 1 contains the engine and fuel tank, so the first activation can remove the payload instead of the spent booster.
+- **Mass units are inconsistent in flight calculations:** part mass and fuel are represented in tonnes, but thrust and aerodynamic drag are in newtons and are divided directly by the tonne total. Convert tonnes to kilograms before calculating acceleration, then validate against known cases.
+- **Tablet input is unverified:** the build canvas listens to mouse events rather than pointer events, so touch-first controls have not been demonstrated.
+- Blueprint saves use browser `localStorage`; they are local to that browser/profile and are not cloud-synced. Stored JSON is parsed without explicit corruption/schema recovery, so save/load error handling should be added.
 - No automated unit or browser end-to-end test suite was present at the time of this audit.
 - The repository did not contain a GitHub Actions workflow or a dependency lockfile at the time of this audit. CI installs from `package.json`; a committed lockfile should be added to make dependency resolution reproducible.
 - `.env.example` lists `GEMINI_API_KEY` and `APP_URL`, but the current app entry flow does not demonstrate a connected Gemini feature. Do not put real API keys in client-side code or commit them.
 
 ## Recommended development order
 
-1. Get CI green and commit a package lockfile.
+1. Keep CI green and commit a package lockfile.
 2. Add focused tests for rocket part placement, blueprint validation/storage, stage order, and physics state transitions.
-3. Fix and test touch/pointer interactions for tablets and phones.
-4. Correctly account for mass units in the thrust and drag calculations; validate launch/landing and time-warp stability against known cases.
-5. Implement actual staging behavior (including decouplers and spent-stage separation) and verify parachute/landing gear behavior.
-6. Add clear save/load error handling and schema validation for browser-stored blueprints.
+3. Correct staging semantics and add actual decoupler/spent-stage separation.
+4. Correct unit conversion and validate launch, landing, drag, fuel consumption, and time-warp stability against known cases.
+5. Replace mouse-only canvas interactions with pointer/touch controls and verify on phones/tablets.
+6. Add schema validation and clear save/load error handling for browser-stored blueprints.
 7. Only then expand planetary transfers, orbital prediction, missions, audio polish, and any AI integration.
 
 ## Continuous integration
