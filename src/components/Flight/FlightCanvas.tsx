@@ -42,10 +42,10 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
       }
 
       const dt = Math.min(0.05, dtReal) * state.timeWarp;
+      const currentBody = getBodyById(state.currentBodyId);
       if (state.landed) setLaunchStatus('PAD / SURFACE');
       else if (state.crashed) setLaunchStatus('IMPACT');
-      else setLaunchStatus(altitude > currentBody.atmosphereHeight ? 'SPACE FLIGHT' : 'ATMOSPHERIC FLIGHT');
-      const currentBody = getBodyById(state.currentBodyId);
+      else setLaunchStatus(Math.sqrt(state.x * state.x + state.y * state.y) - currentBody.radius > currentBody.atmosphereHeight ? 'SPACE FLIGHT' : 'ATMOSPHERIC FLIGHT');
 
       // Part mass and fuel are stored in metric tons; physics forces use SI units.
       // Convert the complete vehicle mass to kilograms before calculating acceleration.
