@@ -110,6 +110,9 @@ export const SpaceScene: React.FC<SpaceSceneProps> = ({ parts, setParts, selecte
   const [worldName, setWorldName] = useState<string>('Earth');
   const [showWorlds, setShowWorlds] = useState(false);
   const [zoomLabel, setZoomLabel] = useState('ORBIT CAMERA');
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
+  const [symmetry, setSymmetry] = useState(false);
+  const [snapEnabled, setSnapEnabled] = useState(true);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -133,6 +136,8 @@ export const SpaceScene: React.FC<SpaceSceneProps> = ({ parts, setParts, selecte
     renderer.domElement.style.touchAction = 'none';
     host.appendChild(renderer.domElement);
 
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = .065;
@@ -179,12 +184,32 @@ export const SpaceScene: React.FC<SpaceSceneProps> = ({ parts, setParts, selecte
     sceneRef.current = scene; cameraRef.current = camera; rendererRef.current = renderer; controlsRef.current = controls; rocketGroupRef.current = rocketGroup; worldRef.current = world;
 
     let raf = 0;
+    const onCanvasPointerDown = (event: PointerEvent) => {
+      if (event.button !== 0 || (event.target as HTMLElement).closest('button')) return;
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+      const hits = raycaster.intersectObjects(rocketGroup.children, true);
+      const hit = hits.find(item => item.object.userData.instanceId);
+      if (hit) {
+        const instanceId = String(hit.object.userData.instanceId);
+        setSelectedInstanceId(instanceId);
+        controls.enabled = false;
+      } else {
+        setSelectedInstanceId(null);
+      }
+    };
+    const onCanvasPointerUp = () => { controls.enabled = true; };
+    renderer.domElement.addEventListener('pointerdown', onCanvasPointerDown);
+    renderer.domElement.addEventListener('pointerup', onCanvasPointerUp);
+    renderer.domElement.addEventListener('pointercancel', onCanvasPointerUp);
     const animate = () => { raf = requestAnimationFrame(animate); controls.update(); world.rotation.y += .00035; renderer.render(scene, camera); };
     animate();
     const resize = () => { if (!host) return; camera.aspect = host.clientWidth / Math.max(1, host.clientHeight); camera.updateProjectionMatrix(); renderer.setSize(host.clientWidth, host.clientHeight); };
     const observer = new ResizeObserver(resize); observer.observe(host);
     return () => {
-      cancelAnimationFrame(raf); observer.disconnect(); controls.dispose(); renderer.dispose();
+      cancelAnimationFrame(raf); observer.disconnect(); controls.dispose(); renderer.domElement.removeEventListener('pointerdown', onCanvasPointerDown); renderer.domElement.removeEventListener('pointerup', onCanvasPointerUp); renderer.domElement.removeEventListener('pointercancel', onCanvasPointerUp); renderer.dispose();
       scene.traverse(obj => { const mesh = obj as THREE.Mesh; if (mesh.geometry) mesh.geometry.dispose(); if (Array.isArray(mesh.material)) mesh.material.forEach(m => m.dispose()); else if (mesh.material) mesh.material.dispose(); });
       renderer.domElement.remove(); sceneRef.current = null;
     };
@@ -217,7 +242,7 @@ export const SpaceScene: React.FC<SpaceSceneProps> = ({ parts, setParts, selecte
       mesh.scale.set(width, height, width);
       mesh.position.set(part.x * .23, 1 + (part.y - minY) * .26 * scale + index * .001, 0);
       mesh.rotation.y = (part.rotation || 0) * Math.PI / 180;
-      mesh.castShadow = true; mesh.receiveShadow = true; mesh.userData.instanceId = part.instanceId;
+      mesh.castShadow = true; mesh.receiveShadow = true; mesh.userData.instanceId = part.instanceId; mesh.userData.partMesh = true;
       group.add(mesh);
 
       // Procedural detailing: each selectable part receives its own reusable
@@ -278,6 +303,7 @@ export const SpaceScene: React.FC<SpaceSceneProps> = ({ parts, setParts, selecte
           addDetail(new THREE.SphereGeometry(0.035, 8, 6), boltMat, Math.cos(a) * 0.55, 0.1, Math.sin(a) * 0.55);
         }
       }
+      details.userData.instanceId = part.instanceId;
       group.add(details);
     });
     if (!parts.length) {
@@ -306,14 +332,28 @@ export const SpaceScene: React.FC<SpaceSceneProps> = ({ parts, setParts, selecte
 
   const addSelectedPart = () => {
     if (!selectedPartDef) return;
-    const nextY = parts.length ? Math.max(...parts.map(p => p.y)) + 2 : 0;
-    const newPart: PlacedPart = {
+    const nextY = parts.length ? Math.max(...parts.map(p => p.y)) + (snapEnabled ? 2 : 1) : 0;
+    const makePart = (x: number): PlacedPart => ({
       instanceId: 'part_' + Math.random().toString(36).slice(2, 11),
-      definitionId: selectedPartDef.id, x: 0, y: nextY, rotation: 0,
+      definitionId: selectedPartDef.id, x, y: nextY, rotation: 0,
       fuel: selectedPartDef.fuelCapacity || 0, stage: 1
-    };
-    setParts(prev => [...prev, newPart]);
+    });
+    const newParts = symmetry ? [makePart(-2), makePart(2)] : [makePart(0)];
+    setParts(prev => [...prev, ...newParts]);
     setSelectedPartDef(null);
+  };
+  const removeSelectedPart = () => {
+    if (!selectedInstanceId) return;
+    setParts(prev => prev.filter(part => part.instanceId !== selectedInstanceId));
+    setSelectedInstanceId(null);
+  };
+  const rotateSelectedPart = () => {
+    if (!selectedInstanceId) return;
+    setParts(prev => prev.map(part => part.instanceId === selectedInstanceId ? { ...part, rotation: ((part.rotation || 0) + 90) % 360 } : part));
+  };
+  const assignSelectedStage = (stage: number) => {
+    if (!selectedInstanceId) return;
+    setParts(prev => prev.map(part => part.instanceId === selectedInstanceId ? { ...part, stage } : part));
   };
 
   return <div className="relative min-w-0 flex-1 overflow-hidden bg-[#030711]">
@@ -323,8 +363,19 @@ export const SpaceScene: React.FC<SpaceSceneProps> = ({ parts, setParts, selecte
     </div>
     <div className="absolute right-3 top-3 flex gap-2">
       <button onClick={() => setShowWorlds(v => !v)} className="rounded-xl border border-cyan-300/30 bg-slate-950/80 px-3 py-2 text-xs font-semibold text-cyan-100 backdrop-blur-md">{worldName} ▾</button>
+      <button onClick={() => setSymmetry(v => !v)} className={'rounded-xl border px-3 py-2 text-xs backdrop-blur-md ' + (symmetry ? 'border-cyan-300 bg-cyan-300/20 text-cyan-100' : 'border-white/15 bg-slate-950/80 text-white')}>Symmetry {symmetry ? 'ON' : 'OFF'}</button>
+      <button onClick={() => setSnapEnabled(v => !v)} className={'rounded-xl border px-3 py-2 text-xs backdrop-blur-md ' + (snapEnabled ? 'border-cyan-300 bg-cyan-300/20 text-cyan-100' : 'border-white/15 bg-slate-950/80 text-white')}>Snap {snapEnabled ? 'ON' : 'OFF'}</button>
       <button onClick={() => { controlsRef.current?.reset(); }} className="rounded-xl border border-white/15 bg-slate-950/80 px-3 py-2 text-xs text-white backdrop-blur-md">Reset view</button>
     </div>
+    {selectedInstanceId && <div className="absolute left-3 top-20 z-10 flex flex-col gap-2 rounded-xl border border-cyan-300/25 bg-slate-950/90 p-3 shadow-xl backdrop-blur-xl">
+      <div className="text-[10px] font-bold tracking-widest text-cyan-200">SELECTED PART</div>
+      <button onClick={rotateSelectedPart} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-white">Rotate 90°</button>
+      <label className="text-[10px] text-slate-400">Stage</label>
+      <select aria-label="Assign stage" value={parts.find(p => p.instanceId === selectedInstanceId)?.stage || 1} onChange={e => assignSelectedStage(Number(e.target.value))} className="rounded-lg bg-slate-800 px-2 py-2 text-xs text-white">
+        {Array.from({ length: 8 }, (_, i) => <option key={i + 1} value={i + 1}>Stage {i + 1}</option>)}
+      </select>
+      <button onClick={removeSelectedPart} className="rounded-lg border border-rose-400/40 px-3 py-2 text-xs text-rose-200">Remove part</button>
+    </div>}
     {showWorlds && <div className="absolute right-3 top-14 z-20 grid max-h-[55%] w-56 grid-cols-2 gap-1 overflow-y-auto rounded-xl border border-cyan-300/25 bg-slate-950/95 p-2 shadow-2xl backdrop-blur-xl">
       {WORLDS.map(body => <button key={body.name} onClick={() => { setWorldName(body.name); setShowWorlds(false); }} className={'rounded-lg border px-2 py-2 text-left text-xs ' + (worldName === body.name ? 'border-cyan-300 bg-cyan-300/15 text-cyan-100' : 'border-white/10 text-slate-300')}>
         <span className="mr-2 inline-block h-3 w-3 rounded-full align-middle" style={{ background: body.color, boxShadow: '0 0 10px ' + body.color }} />{body.name}
