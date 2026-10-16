@@ -172,7 +172,7 @@ export const SpaceScene: React.FC<SpaceSceneProps> = ({ parts, setParts, selecte
     const camera = new THREE.PerspectiveCamera(42, host.clientWidth / Math.max(1, host.clientHeight), .1, 3000);
     camera.position.set(9, 8, 13);
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     renderer.setSize(host.clientWidth, host.clientHeight);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
