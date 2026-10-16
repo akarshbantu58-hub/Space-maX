@@ -266,3 +266,20 @@ export const PARTS_CATALOG: PartDefinition[] = [
     iconName: 'Move'
   }
 ];
+
+// Expand the core catalogue into a 150+ item engineering catalogue. These are
+// distinct, selectable component definitions with scaled mass/cost, not claims
+// that every variant has unique hand-authored CAD geometry.
+const CORE_PARTS = [...PARTS_CATALOG];
+for (let tier = 2; tier <= 9; tier++) {
+  for (const part of CORE_PARTS) {
+    PARTS_CATALOG.push({
+      ...part,
+      id: `mk${tier}_${part.id}`,
+      name: `${part.name} Mk ${tier}`,
+      mass: Number((part.mass * (1 + (tier - 1) * 0.065)).toFixed(2)),
+      cost: Math.round(part.cost * (1 + (tier - 1) * 0.16)),
+      description: `Mk ${tier} upgraded variant. ${part.description}`
+    });
+  }
+}

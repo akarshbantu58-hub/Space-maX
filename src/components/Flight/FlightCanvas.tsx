@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { FlightState, PlacedPart } from '../../types';
 import { getBodyById, G } from '../../data/solarSystem';
 import { PARTS_CATALOG } from '../../data/partsCatalog';
@@ -7,15 +7,22 @@ import { updateThrusterSound, playExplosionSound, playSuccessSound } from '../..
 interface FlightCanvasProps {
   flightState: FlightState;
   setFlightState: React.Dispatch<React.SetStateAction<FlightState>>;
+  setPartsForFuel?: React.Dispatch<React.SetStateAction<PlacedPart[]>>;
   parts: PlacedPart[];
 }
 
 export const FlightCanvas: React.FC<FlightCanvasProps> = ({
   flightState,
   setFlightState,
-  parts
+  parts,
+  setPartsForFuel
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [launchStatus, setLaunchStatus] = useState('READY');
+  const [effectsEnabled, setEffectsEnabled] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(false);
+  const [performanceMode, setPerformanceMode] = useState(true);
+  const audioRef = useRef<AudioContext | null>(null);
   const stateRef = useRef(flightState);
   stateRef.current = flightState;
 
@@ -32,19 +39,24 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
 
       const state = stateRef.current;
       if (state.crashed || state.destroyed) {
+        setLaunchStatus(state.destroyed ? 'VEHICLE LOST' : 'FLIGHT TERMINATED');
         updateThrusterSound(false, 0);
         animationId = requestAnimationFrame(updatePhysics);
         return;
       }
 
-      const dt = Math.min(0.1, dtReal) * state.timeWarp;
+      const dt = Math.min(0.05, dtReal) * state.timeWarp;
       const currentBody = getBodyById(state.currentBodyId);
+      if (state.landed) setLaunchStatus('PAD / SURFACE');
+      else if (state.crashed) setLaunchStatus('IMPACT');
+      else setLaunchStatus(Math.sqrt(state.x * state.x + state.y * state.y) - currentBody.radius > currentBody.atmosphereHeight ? 'SPACE FLIGHT' : 'ATMOSPHERIC FLIGHT');
 
-      // Calculate total mass
-      const totalMass = parts.reduce((sum, p) => {
+      // Part mass and fuel are stored in metric tons; physics forces use SI units.
+      // Convert the complete vehicle mass to kilograms before calculating acceleration.
+      const totalMassKg = Math.max(100, parts.reduce((sum, p) => {
         const def = getPartDef(p.definitionId);
         return sum + (def ? def.mass + (p.fuel || 0) : 0);
-      }, 1);
+      }, 0) * 1000);
 
       // Distance from body center
       const r = Math.sqrt(state.x * state.x + state.y * state.y);
@@ -60,12 +72,22 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
       let ayThrust = 0;
       const activeThrust = parts.reduce((sum, p) => {
         const def = getPartDef(p.definitionId);
-        return sum + (def?.thrust || 0);
+        // Only engines assigned to the currently active stage can produce thrust.
+        return sum + (def?.category === 'engines' && (p.stage || 1) <= state.activeStage ? (def?.thrust || 0) : 0);
       }, 0);
 
-      if (state.throttle > 0 && activeThrust > 0 && !state.landed) {
-        const thrustForce = activeThrust * 1000 * state.throttle; // Newtons
-        const accel = thrustForce / totalMass;
+      // Consume propellant from fuel tanks while engines are firing.
+      const firing = state.throttle > 0 && activeThrust > 0 && !state.landed;
+      const totalFuel = parts.reduce((sum, p) => {
+        const def = getPartDef(p.definitionId);
+        return sum + (def?.category === 'fuel' ? Math.max(0, p.fuel || 0) : 0);
+      }, 0);
+      const effectiveThrust = totalFuel <= 0 ? 0 : activeThrust;
+
+
+      if (firing && effectiveThrust > 0 && totalFuel > 0) {
+        const thrustForce = effectiveThrust * 1000 * state.throttle; // Newtons
+        const accel = thrustForce / totalMassKg;
         // Direction vector from rocket angle (pointing up relative to planet surface or heading)
         axThrust = Math.sin(state.angle) * accel;
         ayThrust = Math.cos(state.angle) * accel;
@@ -83,7 +105,7 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
         const speed = Math.sqrt(state.vx * state.vx + state.vy * state.vy);
         const dragCoeff = state.parachuteDeployed ? 25.0 : 0.5;
         const dragForce = 0.5 * airDensity * speed * speed * dragCoeff;
-        const dragAccel = dragForce / totalMass;
+        const dragAccel = dragForce / totalMassKg;
         if (speed > 0) {
           axDrag = -dragAccel * (state.vx / speed);
           ayDrag = -dragAccel * (state.vy / speed);
@@ -123,7 +145,17 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
         }
       }
 
-      setFlightState(prev => ({
+      setFlightState(prev => {
+        let fuelRemainingToBurn = firing ? Math.min(totalFuel, activeThrust * 1000 * state.throttle * dt / (Math.max(1, parts.reduce((sum, p) => { const d = getPartDef(p.definitionId); return sum + (d?.category === 'engines' ? (d.isp || 250) * 9.80665 : 0); }, 0)))) : 0;
+        const updatedParts = parts.map(p => {
+          const def = getPartDef(p.definitionId);
+          if (def?.category !== 'fuel' || fuelRemainingToBurn <= 0) return p;
+          const burn = Math.min(Math.max(0, p.fuel || 0), fuelRemainingToBurn);
+          fuelRemainingToBurn -= burn;
+          return { ...p, fuel: Math.max(0, (p.fuel || 0) - burn) };
+        });
+        if (firing && totalFuel > 0 && updatedParts.some((p, i) => p.fuel !== parts[i]?.fuel)) setPartsForFuel?.(updatedParts);
+        return ({
         ...prev,
         x: newX,
         y: newY,
@@ -134,7 +166,7 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
         maxAltitude: Math.max(prev.maxAltitude, newAlt),
         maxSpeed: Math.max(prev.maxSpeed, Math.sqrt(newVx * newVx + newVy * newVy)),
         flightTime: prev.flightTime + dtReal
-      }));
+      }); });
 
       animationId = requestAnimationFrame(updatePhysics);
     };
@@ -151,8 +183,15 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
     if (!ctx) return;
 
     const resize = () => {
-      canvas.width = canvas.parentElement?.clientWidth || window.innerWidth;
-      canvas.height = canvas.parentElement?.clientHeight || window.innerHeight;
+      const width = canvas.parentElement?.clientWidth || window.innerWidth;
+      const height = canvas.parentElement?.clientHeight || window.innerHeight;
+      // Cap backing-store resolution on mobile to reduce GPU fill and memory cost.
+      const pixelRatio = Math.min(window.devicePixelRatio || 1, performanceMode ? 1.25 : 1.75);
+      canvas.width = Math.round(width * pixelRatio);
+      canvas.height = Math.round(height * pixelRatio);
+      canvas.style.width = width + 'px';
+      canvas.style.height = height + 'px';
+      ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     };
     resize();
     window.addEventListener('resize', resize);
@@ -163,11 +202,23 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
       const currentBody = getBodyById(state.currentBodyId);
 
       ctx.fillStyle = '#050811';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const viewWidth = canvas.clientWidth || window.innerWidth;
+      const viewHeight = canvas.clientHeight || window.innerHeight;
+      ctx.fillRect(0, 0, viewWidth, viewHeight);
 
-      const centerX = canvas.width / 2;
-      const centerY = canvas.height / 2 + 150;
+      const centerX = viewWidth / 2;
+      const centerY = viewHeight / 2 + 150;
       const zoom = 0.5; // pixels per meter scaling for flight view
+
+      // Flight telemetry overlay.
+      ctx.save();
+      ctx.fillStyle = 'rgba(3, 7, 18, 0.78)'; ctx.fillRect(14, 14, 205, 76);
+      ctx.strokeStyle = 'rgba(34,211,238,.55)'; ctx.strokeRect(14, 14, 205, 76);
+      ctx.fillStyle = '#67e8f9'; ctx.font = 'bold 12px monospace'; ctx.fillText('SPACEMAX / FLIGHT', 25, 33);
+      ctx.fillStyle = '#e2e8f0'; ctx.font = '11px monospace'; ctx.fillText(launchStatus, 25, 51);
+      ctx.fillText('STAGE ' + state.activeStage + '  THR ' + Math.round(state.throttle * 100) + '%', 25, 69);
+      ctx.fillText('T+' + state.flightTime.toFixed(1) + 's', 25, 83);
+      ctx.restore();
 
       // Draw Planet Horizon & Body
       ctx.save();
@@ -204,14 +255,40 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
         ctx.stroke();
       });
 
-      // Thruster Flame Particle Effect
-      if (state.throttle > 0 && !state.landed) {
-        ctx.fillStyle = '#f97316';
-        ctx.beginPath();
-        ctx.moveTo(-10, 20);
-        ctx.lineTo(0, 20 + Math.random() * 40 * state.throttle);
-        ctx.lineTo(10, 20);
-        ctx.fill();
+      // Layered engine plume, glow and turbulent exhaust particles.
+      if (effectsEnabled && state.throttle > 0 && !state.landed && !state.crashed) {
+        const power = Math.max(0, Math.min(1, state.throttle));
+        const flicker = 0.82 + Math.sin(state.flightTime * 29) * 0.12 + Math.sin(state.flightTime * 47) * 0.06;
+        const plumeLength = (34 + 74 * power) * flicker;
+        const glow = ctx.createRadialGradient(0, 24, 2, 0, 42, 30 + power * 22);
+        glow.addColorStop(0, 'rgba(255,255,220,.95)');
+        glow.addColorStop(.25, 'rgba(80,210,255,.72)');
+        glow.addColorStop(1, 'rgba(30,100,255,0)');
+        ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(0, 42, 30 + power * 22, 0, Math.PI * 2); ctx.fill();
+        const plume = ctx.createLinearGradient(0, 18, 0, 18 + plumeLength);
+        plume.addColorStop(0, 'rgba(255,255,235,.98)');
+        plume.addColorStop(.22, 'rgba(90,220,255,.9)');
+        plume.addColorStop(.58, 'rgba(45,125,255,.58)');
+        plume.addColorStop(1, 'rgba(35,75,180,0)');
+        ctx.fillStyle = plume;
+        ctx.beginPath(); ctx.moveTo(-5, 19); ctx.quadraticCurveTo(-12, 38, -7, 18 + plumeLength * .62);
+        ctx.quadraticCurveTo(0, 27 + plumeLength * flicker, 7, 18 + plumeLength * .62);
+        ctx.quadraticCurveTo(12, 38, 5, 19); ctx.closePath(); ctx.fill();
+        for (let i = 0; i < 9; i++) {
+          const seed = state.flightTime * (14 + i * 2) + i * 31;
+          const x = Math.sin(seed * 1.7) * (3 + i * 1.2);
+          const y = 25 + ((seed * 19) % Math.max(1, plumeLength));
+          ctx.fillStyle = i % 2 ? 'rgba(255,190,90,.75)' : 'rgba(130,230,255,.8)';
+          ctx.beginPath(); ctx.arc(x, y, 1 + (i % 3), 0, Math.PI * 2); ctx.fill();
+        }
+        // Atmospheric smoke is only drawn inside the atmosphere.
+        if (Math.sqrt(state.x * state.x + state.y * state.y) - currentBody.radius < currentBody.atmosphereHeight) {
+          for (let i = 0; i < 5; i++) {
+            const t = (state.flightTime * 7 + i * 23) % 90;
+            ctx.fillStyle = 'rgba(180,195,210,' + (0.04 + power * .07) + ')';
+            ctx.beginPath(); ctx.ellipse(Math.sin(t) * (8 + t * .35), 34 + t, 5 + t * .12, 3 + t * .1, 0, 0, Math.PI * 2); ctx.fill();
+          }
+        }
       }
 
       ctx.restore();
@@ -228,9 +305,42 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
     };
   }, [parts]);
 
+  const toggleSound = () => {
+    if (soundEnabled) {
+      audioRef.current?.close();
+      audioRef.current = null;
+      setSoundEnabled(false);
+      return;
+    }
+    const AudioContextCtor = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextCtor) return;
+    const audio = new AudioContextCtor();
+    const oscillator = audio.createOscillator();
+    const gain = audio.createGain();
+    oscillator.type = 'sawtooth';
+    oscillator.frequency.value = 58;
+    gain.gain.value = 0.018;
+    oscillator.connect(gain); gain.connect(audio.destination); oscillator.start();
+    audioRef.current = audio;
+    setSoundEnabled(true);
+  };
+
+  useEffect(() => () => { audioRef.current?.close(); }, []);
+
   return (
     <div className="relative flex-1 h-full bg-slate-950 overflow-hidden">
       <canvas ref={canvasRef} className="w-full h-full" />
+      <div className="absolute bottom-4 right-4 flex gap-2">
+        <button type="button" onClick={() => setEffectsEnabled(v => !v)} className="rounded-lg border border-cyan-300/30 bg-slate-950/85 px-3 py-2 text-xs text-cyan-100">
+          FX {effectsEnabled ? 'ON' : 'OFF'}
+        </button>
+        <button type="button" onClick={() => setPerformanceMode(v => !v)} className="rounded-lg border border-white/20 bg-slate-950/85 px-3 py-2 text-xs text-white">
+          {performanceMode ? 'PERFORMANCE' : 'QUALITY'}
+        </button>
+        <button type="button" onClick={toggleSound} className="rounded-lg border border-white/20 bg-slate-950/85 px-3 py-2 text-xs text-white">
+          SOUND {soundEnabled ? 'ON' : 'OFF'}
+        </button>
+      </div>
     </div>
   );
 };

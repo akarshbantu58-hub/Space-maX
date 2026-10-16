@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { GameMode, PlacedPart, PartDefinition, FlightState, Blueprint } from './types';
 import { PRESET_BLUEPRINTS } from './data/presets';
+import { PARTS_CATALOG } from './data/partsCatalog';
 import { Header } from './components/Header';
-import { VABCanvas } from './components/Build/VABCanvas';
+import { SpaceScene } from './components/Build/SpaceScene';
 import { PartPalette } from './components/Build/PartPalette';
 import { StagingPanel } from './components/Build/StagingPanel';
 import { BlueprintModal } from './components/Build/BlueprintModal';
@@ -84,8 +85,18 @@ export default function App() {
 
   const handleActivateStage = () => {
     playStageSound();
-    // Remove parts in active stage or trigger stage event
-    setParts(prev => prev.filter(p => (p.stage || 1) !== flightState.activeStage));
+
+    // Staging must not delete every component assigned to a stage.
+    // Only decouplers are physically separated by this action; engines,
+    // tanks, command pods and payload remain attached to the vehicle.
+    setParts(prev => prev.filter(part => {
+      const definition = PARTS_CATALOG.find(item => item.id === part.definitionId);
+      return !(
+        (part.stage || 1) === flightState.activeStage &&
+        definition?.isDecoupler
+      );
+    }));
+
     setFlightState(prev => ({
       ...prev,
       activeStage: Math.max(1, prev.activeStage - 1)
@@ -151,7 +162,7 @@ export default function App() {
         {currentMode === 'build' && (
           <>
             <PartPalette onSelectPart={setSelectedPartDef} />
-            <VABCanvas
+            <SpaceScene
               parts={parts}
               setParts={setParts}
               selectedPartDef={selectedPartDef}
@@ -170,6 +181,7 @@ export default function App() {
               flightState={flightState}
               setFlightState={setFlightState}
               parts={parts}
+              setPartsForFuel={setParts}
             />
             <FlightHUD
               flightState={flightState}
