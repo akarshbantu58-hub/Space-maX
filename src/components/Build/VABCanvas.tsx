@@ -29,7 +29,8 @@ export const VABCanvas: React.FC<VABCanvasProps> = ({
   const getPartDef = (defId: string) => PARTS_CATALOG.find(p => p.id === defId);
 
   // Handle Canvas Pan & Zoom
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
     if (e.button === 1 || e.button === 2 || (e.button === 0 && e.shiftKey)) {
       setIsDraggingCanvas(true);
       setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
@@ -79,10 +80,13 @@ export const VABCanvas: React.FC<VABCanvasProps> = ({
       setSelectedPartDef(null);
     } else {
       setSelectedInstanceId(null);
+      // Empty-space drags pan the build area on both touchscreens and desktop.
+      setIsDraggingCanvas(true);
+      setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
     }
   };
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (isDraggingCanvas) {
       setPan({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
     } else if (isDraggingPart && selectedInstanceId) {
@@ -107,7 +111,10 @@ export const VABCanvas: React.FC<VABCanvasProps> = ({
     }
   };
 
-  const handleMouseUp = () => {
+  const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
     setIsDraggingCanvas(false);
     setIsDraggingPart(false);
   };
@@ -260,10 +267,12 @@ export const VABCanvas: React.FC<VABCanvasProps> = ({
     <div className="relative flex-1 h-full bg-slate-950 overflow-hidden">
       <canvas
         ref={canvasRef}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
         onWheel={handleWheel}
+        style={{ touchAction: 'none' }}
         className="w-full h-full cursor-grab active:cursor-grabbing"
       />
 
