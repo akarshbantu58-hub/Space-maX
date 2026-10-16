@@ -1,0 +1,6 @@
+{
+  "name": "Spaceflight Simulator 2D",
+  "description": "Full-featured 2D rocket builder and orbital physics spaceflight simulator with full solar system planets, stages, drag-and-drop parts, and orbital map view.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
