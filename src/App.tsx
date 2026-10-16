@@ -181,6 +181,7 @@ export default function App() {
               flightState={flightState}
               setFlightState={setFlightState}
               parts={parts}
+              setPartsForFuel={setParts}
             />
             <FlightHUD
               flightState={flightState}
