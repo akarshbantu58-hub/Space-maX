@@ -219,6 +219,66 @@ export const SpaceScene: React.FC<SpaceSceneProps> = ({ parts, setParts, selecte
       mesh.rotation.y = (part.rotation || 0) * Math.PI / 180;
       mesh.castShadow = true; mesh.receiveShadow = true; mesh.userData.instanceId = part.instanceId;
       group.add(mesh);
+
+      // Procedural detailing: each selectable part receives its own reusable
+      // sub-mesh details, so the catalogue looks like hardware rather than
+      // plain cylinders. All dimensions are local to this part.
+      const details = new THREE.Group();
+      details.position.copy(mesh.position);
+      details.rotation.copy(mesh.rotation);
+      details.scale.set(width, height, width);
+      const detailMaterial = (color: string, metalness = 0.72, roughness = 0.28) =>
+        new THREE.MeshStandardMaterial({ color, metalness, roughness });
+      const addDetail = (geometry: THREE.BufferGeometry, material: THREE.Material, x: number, y: number, z: number) => {
+        const piece = new THREE.Mesh(geometry, material);
+        piece.position.set(x, y, z);
+        piece.castShadow = true;
+        piece.receiveShadow = true;
+        details.add(piece);
+      };
+      const id = def.id.toLowerCase();
+      if (id.includes('fuel') || id.includes('tank') || id.includes('stage')) {
+        const bandMat = detailMaterial('#303d4b');
+        [-0.34, 0.34].forEach(y => addDetail(new THREE.TorusGeometry(0.98, 0.035, 8, 32), bandMat, 0, y, 0));
+        addDetail(new THREE.CylinderGeometry(1.015, 1.015, 0.055, 32), detailMaterial('#d8e1e9'), 0, 0.46, 0);
+        addDetail(new THREE.CylinderGeometry(1.015, 1.015, 0.055, 32), detailMaterial('#d8e1e9'), 0, -0.46, 0);
+      }
+      if (id.includes('engine')) {
+        addDetail(new THREE.CylinderGeometry(0.35, 0.64, 0.28, 32, 1, true), detailMaterial('#384654', 0.88, 0.22), 0, -0.42, 0);
+        addDetail(new THREE.CylinderGeometry(0.17, 0.23, 0.06, 24), detailMaterial('#171f2a', 0.65, 0.3), 0, -0.58, 0);
+        for (let rib = 0; rib < 8; rib++) {
+          const a = rib * Math.PI / 4;
+          addDetail(new THREE.BoxGeometry(0.035, 0.26, 0.035), detailMaterial('#a5b2bf'), Math.cos(a) * 0.55, -0.4, Math.sin(a) * 0.55);
+        }
+      }
+      if (id.includes('capsule') || id.includes('command')) {
+        addDetail(new THREE.SphereGeometry(0.14, 20, 12), detailMaterial('#39c9ff', 0.3, 0.12), 0, 0.15, 0.39);
+        addDetail(new THREE.TorusGeometry(0.64, 0.045, 8, 32), detailMaterial('#4b5968'), 0, -0.25, 0);
+      }
+      if (id.includes('solar')) {
+        const lineMat = detailMaterial('#b4dcff', 0.5, 0.3);
+        for (let line = -2; line <= 2; line++) addDetail(new THREE.BoxGeometry(0.012, 0.018, 0.9), lineMat, line * 0.18, 0.045, 0);
+        for (let line = -2; line <= 2; line++) addDetail(new THREE.BoxGeometry(0.9, 0.018, 0.012), lineMat, 0, 0.045, line * 0.18);
+      }
+      if (id.includes('parachute')) {
+        addDetail(new THREE.CylinderGeometry(0.025, 0.025, 0.7, 8), detailMaterial('#dce6f0'), 0, -0.45, 0);
+        for (let cord = 0; cord < 6; cord++) {
+          const a = cord * Math.PI / 3;
+          const line = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.62, 5), detailMaterial('#e6e8ed'));
+          line.position.set(Math.cos(a) * 0.28, -0.34, Math.sin(a) * 0.28);
+          line.rotation.z = Math.cos(a) * 0.45;
+          line.rotation.x = Math.sin(a) * 0.45;
+          details.add(line);
+        }
+      }
+      if (id.includes('decoupler') || id.includes('separator')) {
+        const boltMat = detailMaterial('#e0b96a');
+        for (let bolt = 0; bolt < 12; bolt++) {
+          const a = bolt * Math.PI / 6;
+          addDetail(new THREE.SphereGeometry(0.035, 8, 6), boltMat, Math.cos(a) * 0.55, 0.1, Math.sin(a) * 0.55);
+        }
+      }
+      group.add(details);
     });
     if (!parts.length) {
       const sample = new THREE.Group();
