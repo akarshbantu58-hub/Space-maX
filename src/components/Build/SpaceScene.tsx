@@ -49,9 +49,10 @@ function makeSurfaceTexture(color: string, kind: string, seed: number): THREE.Ca
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   let n = seed >>> 0;
   const rand = () => { n = (n * 1664525 + 1013904223) >>> 0; return n / 4294967296; };
+  // Layered procedural albedo: broad geological regions, fine grain, and craters.
   if (kind === 'ocean') {
     ctx.fillStyle = '#184b37';
-    for (let i = 0; i < 75; i++) {
+    for (let i = 0; i < 90; i++) {
       const x = rand() * canvas.width, y = rand() * canvas.height;
       ctx.beginPath(); ctx.ellipse(x, y, 18 + rand() * 100, 8 + rand() * 38, rand() * 3, 0, Math.PI * 2); ctx.fill();
     }
@@ -60,11 +61,21 @@ function makeSurfaceTexture(color: string, kind: string, seed: number): THREE.Ca
       ctx.beginPath(); ctx.ellipse(rand() * canvas.width, rand() * canvas.height, 8 + rand() * 70, 2 + rand() * 15, rand() * 2, 0, Math.PI * 2); ctx.fill();
     }
   } else if (kind === 'gas' || kind === 'cloud') {
-    for (let i = 0; i < 120; i++) {
-      ctx.fillStyle = i % 2 ? 'rgba(255,245,220,.18)' : 'rgba(30,45,80,.13)';
-      ctx.fillRect(0, rand() * canvas.height, canvas.width, 2 + rand() * 22);
+    for (let i = 0; i < 150; i++) {
+      ctx.fillStyle = i % 2 ? 'rgba(255,245,220,.2)' : 'rgba(30,45,80,.16)';
+      ctx.fillRect(0, rand() * canvas.height, canvas.width, 2 + rand() * 24);
+    }
+    for (let i = 0; i < 180; i++) {
+      ctx.fillStyle = 'rgba(255,255,255,.045)';
+      ctx.fillRect(rand() * canvas.width, rand() * canvas.height, 15 + rand() * 100, 1 + rand() * 4);
     }
   } else {
+    // Regional mottling adds visible terrain variation even without downloaded assets.
+    for (let i = 0; i < 700; i++) {
+      const x = rand() * canvas.width, y = rand() * canvas.height, r = 3 + rand() * 34;
+      ctx.fillStyle = rand() > .5 ? 'rgba(255,255,255,.07)' : 'rgba(15,12,10,.09)';
+      ctx.beginPath(); ctx.ellipse(x, y, r * (1 + rand()), r * .45, rand() * 3, 0, Math.PI * 2); ctx.fill();
+    }
     for (let i = 0; i < 2800; i++) {
       const x = rand() * canvas.width, y = rand() * canvas.height, r = 1 + rand() * (kind === 'ice' ? 4 : 8);
       ctx.fillStyle = rand() > .5 ? 'rgba(255,255,255,.16)' : 'rgba(15,12,10,.16)';
@@ -79,7 +90,45 @@ function makeSurfaceTexture(color: string, kind: string, seed: number): THREE.Ca
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 8;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.generateMipmaps = true;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
   return texture;
+}
+
+function makeTerrainGeometry(seed: number, kind: string): THREE.SphereGeometry {
+  const geometry = new THREE.SphereGeometry(9, 128, 96);
+  const position = geometry.attributes.position as THREE.BufferAttribute;
+  const normal = new THREE.Vector3();
+  let n = seed >>> 0;
+  const rand = () => { n = (n * 1664525 + 1013904223) >>> 0; return n / 4294967296; };
+  const craters = Array.from({ length: kind === 'ice' || kind === 'rock' ? 95 : 30 }, () => ({
+    direction: new THREE.Vector3(rand() * 2 - 1, rand() * 2 - 1, rand() * 2 - 1).normalize(),
+    radius: .018 + rand() * .075,
+    depth: .025 + rand() * .09
+  }));
+  for (let i = 0; i < position.count; i++) {
+    normal.fromBufferAttribute(position, i).normalize();
+    const broad = Math.sin(normal.x * 11 + seed) * Math.cos(normal.y * 9 - seed * .2) * .035;
+    const fine = Math.sin(normal.z * 37 + normal.x * 21) * Math.cos(normal.y * 29) * .012;
+    let relief = broad + fine;
+    for (const crater of craters) {
+      const dot = THREE.MathUtils.clamp(normal.dot(crater.direction), -1, 1);
+      const angle = Math.acos(dot);
+      if (angle < crater.radius * 2.1) {
+        const t = angle / crater.radius;
+        relief -= crater.depth * Math.exp(-t * t * 2.2);
+        if (t > .72 && t < 1.12) relief += crater.depth * .28;
+      }
+    }
+    const radius = 9 * (1 + relief * (kind === 'ocean' || kind === 'cloud' || kind === 'gas' ? .18 : 1));
+    position.setXYZ(i, normal.x * radius, normal.y * radius, normal.z * radius);
+  }
+  position.needsUpdate = true;
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 function makePartGeometry(def: PartDefinition): THREE.BufferGeometry {
@@ -177,10 +226,12 @@ export const SpaceScene: React.FC<SpaceSceneProps> = ({ parts, setParts, selecte
 
     const rocketGroup = new THREE.Group(); scene.add(rocketGroup);
     const worldGroup = new THREE.Group(); scene.add(worldGroup);
-    const world = new THREE.Mesh(new THREE.SphereGeometry(9, 96, 64), new THREE.MeshStandardMaterial({ map: makeSurfaceTexture('#2679c8', 'ocean', 42), roughness: .78, metalness: .02 }));
+    const world = new THREE.Mesh(makeTerrainGeometry(42, 'ocean'), new THREE.MeshStandardMaterial({ map: makeSurfaceTexture('#2679c8', 'ocean', 42), roughness: .78, metalness: .02 }));
     world.position.set(-16, 5, -32); worldGroup.add(world);
-    const atmosphere = new THREE.Mesh(new THREE.SphereGeometry(9.18, 64, 48), new THREE.MeshBasicMaterial({ color: '#338dff', transparent: true, opacity: .13, side: THREE.BackSide }));
+    const atmosphere = new THREE.Mesh(new THREE.SphereGeometry(9.22, 96, 64), new THREE.MeshBasicMaterial({ color: '#338dff', transparent: true, opacity: .13, side: THREE.BackSide, depthWrite: false }));
     atmosphere.position.copy(world.position); worldGroup.add(atmosphere);
+    const clouds = new THREE.Mesh(new THREE.SphereGeometry(9.08, 96, 64), new THREE.MeshStandardMaterial({ color: '#eef5ff', transparent: true, opacity: .19, roughness: 1, metalness: 0, depthWrite: false }));
+    clouds.position.copy(world.position); worldGroup.add(clouds);
     sceneRef.current = scene; cameraRef.current = camera; rendererRef.current = renderer; controlsRef.current = controls; rocketGroupRef.current = rocketGroup; worldRef.current = world;
 
     let raf = 0;
@@ -204,7 +255,7 @@ export const SpaceScene: React.FC<SpaceSceneProps> = ({ parts, setParts, selecte
     renderer.domElement.addEventListener('pointerdown', onCanvasPointerDown);
     renderer.domElement.addEventListener('pointerup', onCanvasPointerUp);
     renderer.domElement.addEventListener('pointercancel', onCanvasPointerUp);
-    const animate = () => { raf = requestAnimationFrame(animate); controls.update(); world.rotation.y += .00035; renderer.render(scene, camera); };
+    const animate = () => { raf = requestAnimationFrame(animate); controls.update(); world.rotation.y += .00035; worldGroup.children[1].rotation.y += .00042; worldGroup.children[2].rotation.y += .0005; renderer.render(scene, camera); };
     animate();
     const resize = () => { if (!host) return; camera.aspect = host.clientWidth / Math.max(1, host.clientHeight); camera.updateProjectionMatrix(); renderer.setSize(host.clientWidth, host.clientHeight); };
     const observer = new ResizeObserver(resize); observer.observe(host);
@@ -326,7 +377,7 @@ export const SpaceScene: React.FC<SpaceSceneProps> = ({ parts, setParts, selecte
     material.map = makeSurfaceTexture(body.color, body.kind, WORLDS.indexOf(body) * 97 + 17);
     material.needsUpdate = true;
     old.scale.setScalar(body.radius / 3.8);
-    old.geometry.dispose(); old.geometry = new THREE.SphereGeometry(9, 96, 64);
+    old.geometry.dispose(); old.geometry = makeTerrainGeometry(WORLDS.indexOf(body) * 97 + 17, body.kind);
     if (previous) previous.dispose();
   }, [worldName]);
 
