@@ -282,7 +282,7 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
           ctx.beginPath(); ctx.arc(x, y, 1 + (i % 3), 0, Math.PI * 2); ctx.fill();
         }
         // Atmospheric smoke is only drawn inside the atmosphere.
-        if (altitude < currentBody.atmosphereHeight) {
+        if (Math.sqrt(state.x * state.x + state.y * state.y) - currentBody.radius < currentBody.atmosphereHeight) {
           for (let i = 0; i < 5; i++) {
             const t = (state.flightTime * 7 + i * 23) % 90;
             ctx.fillStyle = 'rgba(180,195,210,' + (0.04 + power * .07) + ')';
