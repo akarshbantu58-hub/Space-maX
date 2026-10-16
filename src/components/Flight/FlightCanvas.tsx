@@ -21,6 +21,7 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
   const [launchStatus, setLaunchStatus] = useState('READY');
   const [effectsEnabled, setEffectsEnabled] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(false);
+  const [performanceMode, setPerformanceMode] = useState(true);
   const audioRef = useRef<AudioContext | null>(null);
   const stateRef = useRef(flightState);
   stateRef.current = flightState;
@@ -182,8 +183,15 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
     if (!ctx) return;
 
     const resize = () => {
-      canvas.width = canvas.parentElement?.clientWidth || window.innerWidth;
-      canvas.height = canvas.parentElement?.clientHeight || window.innerHeight;
+      const width = canvas.parentElement?.clientWidth || window.innerWidth;
+      const height = canvas.parentElement?.clientHeight || window.innerHeight;
+      // Cap backing-store resolution on mobile to reduce GPU fill and memory cost.
+      const pixelRatio = Math.min(window.devicePixelRatio || 1, performanceMode ? 1.25 : 1.75);
+      canvas.width = Math.round(width * pixelRatio);
+      canvas.height = Math.round(height * pixelRatio);
+      canvas.style.width = width + 'px';
+      canvas.style.height = height + 'px';
+      ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     };
     resize();
     window.addEventListener('resize', resize);
@@ -194,10 +202,12 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
       const currentBody = getBodyById(state.currentBodyId);
 
       ctx.fillStyle = '#050811';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const viewWidth = canvas.clientWidth || window.innerWidth;
+      const viewHeight = canvas.clientHeight || window.innerHeight;
+      ctx.fillRect(0, 0, viewWidth, viewHeight);
 
-      const centerX = canvas.width / 2;
-      const centerY = canvas.height / 2 + 150;
+      const centerX = viewWidth / 2;
+      const centerY = viewHeight / 2 + 150;
       const zoom = 0.5; // pixels per meter scaling for flight view
 
       // Flight telemetry overlay.
@@ -323,6 +333,9 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
       <div className="absolute bottom-4 right-4 flex gap-2">
         <button type="button" onClick={() => setEffectsEnabled(v => !v)} className="rounded-lg border border-cyan-300/30 bg-slate-950/85 px-3 py-2 text-xs text-cyan-100">
           FX {effectsEnabled ? 'ON' : 'OFF'}
+        </button>
+        <button type="button" onClick={() => setPerformanceMode(v => !v)} className="rounded-lg border border-white/20 bg-slate-950/85 px-3 py-2 text-xs text-white">
+          {performanceMode ? 'PERFORMANCE' : 'QUALITY'}
         </button>
         <button type="button" onClick={toggleSound} className="rounded-lg border border-white/20 bg-slate-950/85 px-3 py-2 text-xs text-white">
           SOUND {soundEnabled ? 'ON' : 'OFF'}
