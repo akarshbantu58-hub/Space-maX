@@ -40,11 +40,12 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
       const dt = Math.min(0.1, dtReal) * state.timeWarp;
       const currentBody = getBodyById(state.currentBodyId);
 
-      // Calculate total mass
-      const totalMass = parts.reduce((sum, p) => {
+      // Part mass and fuel are stored in metric tons; physics forces use SI units.
+      // Convert the complete vehicle mass to kilograms before calculating acceleration.
+      const totalMassKg = Math.max(100, parts.reduce((sum, p) => {
         const def = getPartDef(p.definitionId);
         return sum + (def ? def.mass + (p.fuel || 0) : 0);
-      }, 1);
+      }, 0) * 1000);
 
       // Distance from body center
       const r = Math.sqrt(state.x * state.x + state.y * state.y);
@@ -65,7 +66,7 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
 
       if (state.throttle > 0 && activeThrust > 0 && !state.landed) {
         const thrustForce = activeThrust * 1000 * state.throttle; // Newtons
-        const accel = thrustForce / totalMass;
+        const accel = thrustForce / totalMassKg;
         // Direction vector from rocket angle (pointing up relative to planet surface or heading)
         axThrust = Math.sin(state.angle) * accel;
         ayThrust = Math.cos(state.angle) * accel;
@@ -83,7 +84,7 @@ export const FlightCanvas: React.FC<FlightCanvasProps> = ({
         const speed = Math.sqrt(state.vx * state.vx + state.vy * state.vy);
         const dragCoeff = state.parachuteDeployed ? 25.0 : 0.5;
         const dragForce = 0.5 * airDensity * speed * speed * dragCoeff;
-        const dragAccel = dragForce / totalMass;
+        const dragAccel = dragForce / totalMassKg;
         if (speed > 0) {
           axDrag = -dragAccel * (state.vx / speed);
           ayDrag = -dragAccel * (state.vy / speed);
