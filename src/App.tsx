@@ -3,7 +3,7 @@ import { GameMode, PlacedPart, PartDefinition, FlightState, Blueprint } from './
 import { PRESET_BLUEPRINTS } from './data/presets';
 import { PARTS_CATALOG } from './data/partsCatalog';
 import { Header } from './components/Header';
-import { VABCanvas } from './components/Build/VABCanvas';
+import { SpaceScene } from './components/Build/SpaceScene';
 import { PartPalette } from './components/Build/PartPalette';
 import { StagingPanel } from './components/Build/StagingPanel';
 import { BlueprintModal } from './components/Build/BlueprintModal';
@@ -162,7 +162,7 @@ export default function App() {
         {currentMode === 'build' && (
           <>
             <PartPalette onSelectPart={setSelectedPartDef} />
-            <VABCanvas
+            <SpaceScene
               parts={parts}
               setParts={setParts}
               selectedPartDef={selectedPartDef}
