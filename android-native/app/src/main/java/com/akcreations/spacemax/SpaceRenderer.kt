@@ -22,6 +22,10 @@ class SpaceRenderer : GLSurfaceView.Renderer {
     @Volatile var engineCount = 1
     @Volatile var hasCapsule = true
     @Volatile var finCount = 4
+    @Volatile var simActive = false
+    @Volatile var fuelPercent = 100f
+    @Volatile var verticalVelocity = 0f
+    @Volatile var altitudeMeters = 0f
     private var width = 1
     private var height = 1
     private var program = 0
@@ -76,7 +80,20 @@ class SpaceRenderer : GLSurfaceView.Renderer {
     }
 
     override fun onDrawFrame(gl: GL10?) {
-        frame += 0.016f
+        val dt = 0.016f
+        frame += dt
+        if (simActive) {
+            if (launching && fuelPercent > 0f) {
+                val burnRate = engineCount.coerceIn(1, 5) * 0.16f
+                fuelPercent = (fuelPercent - burnRate * dt).coerceAtLeast(0f)
+            }
+            val thrustAcceleration = if (launching && fuelPercent > 0f) engineCount.coerceIn(1, 5) * 9.5f else 0f
+            val gravity = 9.81f
+            verticalVelocity += (thrustAcceleration - gravity) * dt
+            altitudeMeters = (altitudeMeters + verticalVelocity * dt).coerceAtLeast(0f)
+            if (altitudeMeters <= 0f && verticalVelocity < 0f) verticalVelocity = 0f
+            if (fuelPercent <= 0f) launching = false
+        }
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
         GLES20.glUseProgram(program)
         Matrix.setLookAtM(view, 0, 0f, 1.1f, 7.2f, 0f, 0.1f, 0f, 0f, 1f, 0f)
@@ -96,7 +113,7 @@ class SpaceRenderer : GLSurfaceView.Renderer {
         draw("sphere", planetX - 0.13f, 0.82f, -2.05f, planetScale * 0.91f, planetScale * 0.91f, planetScale * 0.91f, floatArrayOf(0.12f, 0.52f, 0.76f, 1f))
 
         if (scene != 2) {
-            val lift = if (launching) (sin(frame * 2.4f) * 0.7f + frame * 0.12f).coerceAtMost(2.8f) else 0f
+            val lift = (altitudeMeters / 180f).coerceIn(0f, 4.5f)
             val y = -0.15f + lift
             for (tank in 0 until tankCount.coerceIn(1, 5)) {
                 val tankY = y - 0.10f + tank * 0.76f
