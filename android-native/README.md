@@ -6,6 +6,7 @@ This is the native Android rebuild track. It does **not** use React, Vite, HTML,
 - Native landscape Android activity and touch camera controls.
 - OpenGL ES 3D scene with a procedural rocket, booster fins, engine bell, planet sphere, and starfield.
 - Native Build / Flight / Planets / Launch controls.
+- Prototype fuel/thrust/gravity vertical motion and a basic stage-separation control.
 - Interactive VAB controls for adding tanks, engines, capsule, and fins, plus craft reset.
 - GitHub Actions workflow that produces a debug APK artifact.
 
