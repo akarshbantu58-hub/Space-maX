@@ -18,6 +18,10 @@ class SpaceRenderer : GLSurfaceView.Renderer {
     @Volatile var lastY = 0f
     @Volatile var scene = 0
     @Volatile var launching = false
+    @Volatile var tankCount = 1
+    @Volatile var engineCount = 1
+    @Volatile var hasCapsule = true
+    @Volatile var finCount = 4
     private var width = 1
     private var height = 1
     private var program = 0
@@ -94,14 +98,22 @@ class SpaceRenderer : GLSurfaceView.Renderer {
         if (scene != 2) {
             val lift = if (launching) (sin(frame * 2.4f) * 0.7f + frame * 0.12f).coerceAtMost(2.8f) else 0f
             val y = -0.15f + lift
-            draw("cylinder", -0.45f, y - 0.66f, 0f, 0.43f, 1.35f, 0.43f, floatArrayOf(0.73f, 0.78f, 0.84f, 1f))
-            draw("cylinder", -0.45f, y - 0.27f, 0.01f, 0.445f, 0.055f, 0.445f, floatArrayOf(0.98f, 0.43f, 0.08f, 1f))
-            draw("cylinder", -0.45f, y - 1.33f, 0f, 0.29f, 0.28f, 0.29f, floatArrayOf(0.36f, 0.43f, 0.55f, 1f))
-            draw("cone", -0.45f, y - 1.54f, 0f, 0.29f, 0.35f, 0.29f, floatArrayOf(0.88f, 0.36f, 0.09f, 1f))
-            draw("cylinder", -0.45f, y + 0.28f, 0f, 0.31f, 0.83f, 0.31f, floatArrayOf(0.87f, 0.9f, 0.94f, 1f))
-            draw("cylinder", -0.45f, y + 0.12f, 0f, 0.322f, 0.045f, 0.322f, floatArrayOf(0.97f, 0.48f, 0.12f, 1f))
-            draw("cone", -0.45f, y + 0.94f, 0f, 0.31f, 0.44f, 0.31f, floatArrayOf(0.94f, 0.95f, 0.98f, 1f))
-            for (angle in 0..3) {
+            for (tank in 0 until tankCount.coerceIn(1, 5)) {
+                val tankY = y - 0.10f + tank * 0.76f
+                draw("cylinder", -0.45f, tankY - 0.45f, 0f, 0.43f, 0.78f, 0.43f, floatArrayOf(0.73f, 0.78f, 0.84f, 1f))
+                draw("cylinder", -0.45f, tankY - 0.06f, 0.01f, 0.445f, 0.045f, 0.445f, floatArrayOf(0.98f, 0.43f, 0.08f, 1f))
+            }
+            for (engine in 0 until engineCount.coerceIn(1, 5)) {
+                val offset = (engine - (engineCount.coerceIn(1, 5) - 1) / 2f) * 0.19f
+                draw("cylinder", -0.45f + offset, y - 1.33f, 0f, 0.13f, 0.28f, 0.13f, floatArrayOf(0.36f, 0.43f, 0.55f, 1f))
+                draw("cone", -0.45f + offset, y - 1.54f, 0f, 0.13f, 0.35f, 0.13f, floatArrayOf(0.88f, 0.36f, 0.09f, 1f))
+            }
+            if (hasCapsule) {
+                draw("cylinder", -0.45f, y + 0.28f, 0f, 0.31f, 0.83f, 0.31f, floatArrayOf(0.87f, 0.9f, 0.94f, 1f))
+                draw("cylinder", -0.45f, y + 0.12f, 0f, 0.322f, 0.045f, 0.322f, floatArrayOf(0.97f, 0.48f, 0.12f, 1f))
+                draw("cone", -0.45f, y + 0.94f, 0f, 0.31f, 0.44f, 0.31f, floatArrayOf(0.94f, 0.95f, 0.98f, 1f))
+            }
+            for (angle in 0 until finCount.coerceIn(0, 8)) {
                 Matrix.setIdentityM(model, 0)
                 Matrix.translateM(model, 0, -0.45f, y - 1.05f, 0f)
                 Matrix.rotateM(model, 0, angle * 90f, 0f, 1f, 0f)
