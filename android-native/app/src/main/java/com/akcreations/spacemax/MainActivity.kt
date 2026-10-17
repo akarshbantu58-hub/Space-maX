@@ -78,6 +78,10 @@ class MainActivity : Activity() {
             gameView.renderer.hasCapsule = true
             gameView.renderer.finCount = 4
             gameView.renderer.launching = false
+            gameView.renderer.simActive = false
+            gameView.renderer.fuelPercent = 100f
+            gameView.renderer.verticalVelocity = 0f
+            gameView.renderer.altitudeMeters = 0f
             updateAssemblyStatus()
         }
         bottomPanel.addView(parts, LinearLayout.LayoutParams(-1, dp(44)))
@@ -97,9 +101,10 @@ class MainActivity : Activity() {
             gameView.renderer.scene = 2
             status.text = "PLANET VIEW  •  PROCEDURAL SPHERE PREVIEW"
         }
-        addButton(controls, "LAUNCH  ▶") {
+        addButton(controls, "LAUNCH / CUTOFF") {
+            gameView.renderer.simActive = true
             gameView.renderer.launching = !gameView.renderer.launching
-            status.text = if (gameView.renderer.launching) "ENGINE IGNITION  •  THRUST ENABLED" else "ENGINE CUTOFF  •  VEHICLE COASTING"
+            status.text = if (gameView.renderer.launching) "ENGINE IGNITION  •  FUEL ${gameView.renderer.fuelPercent.toInt()}%" else "ENGINE CUTOFF  •  GRAVITY COAST"
         }
         bottomPanel.addView(controls, LinearLayout.LayoutParams(-1, dp(48)))
         root.addView(bottomPanel, FrameLayout.LayoutParams(-1, dp(98), Gravity.BOTTOM))
