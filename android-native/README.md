@@ -16,4 +16,4 @@ From this directory, with JDK 17 and Gradle 8.9 installed:
 
 APK output: app/build/outputs/apk/debug/app-debug.apk
 
-The current renderer is the first playable foundation, not the finished simulator. Detailed part catalogue, persistent craft assembly, orbital mechanics, 20+ planet assets, terrain materials, audio, and performance tuning are subsequent milestones.
+The current renderer is the first playable foundation, not the finished simulator. The VAB controls now adjust the visible tank, engine, capsule, and fin geometry. Detailed part catalogue, persistent craft assembly, orbital mechanics, 20+ planet assets, terrain materials, audio, and performance tuning are subsequent milestones.
