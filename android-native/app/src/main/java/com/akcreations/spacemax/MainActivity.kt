@@ -82,6 +82,7 @@ class MainActivity : Activity() {
             gameView.renderer.fuelPercent = 100f
             gameView.renderer.verticalVelocity = 0f
             gameView.renderer.altitudeMeters = 0f
+            gameView.renderer.stageSeparated = false
             updateAssemblyStatus()
         }
         bottomPanel.addView(parts, LinearLayout.LayoutParams(-1, dp(44)))
@@ -100,6 +101,11 @@ class MainActivity : Activity() {
         addButton(controls, "PLANETS") {
             gameView.renderer.scene = 2
             status.text = "PLANET VIEW  •  PROCEDURAL SPHERE PREVIEW"
+        }
+        addButton(controls, "STAGE") {
+            gameView.renderer.stageSeparated = true
+            gameView.renderer.launching = false
+            status.text = "STAGE SEPARATED  •  BOOSTER ENGINES DISCONNECTED"
         }
         addButton(controls, "LAUNCH / CUTOFF") {
             gameView.renderer.simActive = true
