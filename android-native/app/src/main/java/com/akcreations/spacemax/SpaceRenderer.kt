@@ -26,6 +26,7 @@ class SpaceRenderer : GLSurfaceView.Renderer {
     @Volatile var fuelPercent = 100f
     @Volatile var verticalVelocity = 0f
     @Volatile var altitudeMeters = 0f
+    @Volatile var stageSeparated = false
     private var width = 1
     private var height = 1
     private var program = 0
@@ -115,12 +116,12 @@ class SpaceRenderer : GLSurfaceView.Renderer {
         if (scene != 2) {
             val lift = (altitudeMeters / 180f).coerceIn(0f, 4.5f)
             val y = -0.15f + lift
-            for (tank in 0 until tankCount.coerceIn(1, 5)) {
+            for (tank in (if (stageSeparated) 1 else 0) until tankCount.coerceIn(1, 5)) {
                 val tankY = y - 0.10f + tank * 0.76f
                 draw("cylinder", -0.45f, tankY - 0.45f, 0f, 0.43f, 0.78f, 0.43f, floatArrayOf(0.73f, 0.78f, 0.84f, 1f))
                 draw("cylinder", -0.45f, tankY - 0.06f, 0.01f, 0.445f, 0.045f, 0.445f, floatArrayOf(0.98f, 0.43f, 0.08f, 1f))
             }
-            for (engine in 0 until engineCount.coerceIn(1, 5)) {
+            for (engine in (if (stageSeparated) 0 else 0) until (if (stageSeparated) 0 else engineCount.coerceIn(1, 5))) {
                 val offset = (engine - (engineCount.coerceIn(1, 5) - 1) / 2f) * 0.19f
                 draw("cylinder", -0.45f + offset, y - 1.33f, 0f, 0.13f, 0.28f, 0.13f, floatArrayOf(0.36f, 0.43f, 0.55f, 1f))
                 draw("cone", -0.45f + offset, y - 1.54f, 0f, 0.13f, 0.35f, 0.13f, floatArrayOf(0.88f, 0.36f, 0.09f, 1f))
