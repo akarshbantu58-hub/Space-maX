@@ -185,7 +185,8 @@ class SpaceRenderer : GLSurfaceView.Renderer {
                 val lon2 = 2 * Math.PI * (s + 1) / segments
                 val p1 = point(lat1, lon1); val p2 = point(lat2, lon1)
                 val p3 = point(lat2, lon2); val p4 = point(lat1, lon2)
-                tri(v, *p1, *p2, *p3); tri(v, *p1, *p3, *p4)
+                tri(v, p1[0], p1[1], p1[2], p2[0], p2[1], p2[2], p3[0], p3[1], p3[2])
+                tri(v, p1[0], p1[1], p1[2], p3[0], p3[1], p3[2], p4[0], p4[1], p4[2])
             }
         }
         return mesh(v)
