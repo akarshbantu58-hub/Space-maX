@@ -47,11 +47,43 @@ class MainActivity : Activity() {
         top.addView(title); top.addView(status)
         root.addView(top, FrameLayout.LayoutParams(-1, dp(66), Gravity.TOP))
 
+        val bottomPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(8), dp(4), dp(8), dp(4))
+            setBackgroundColor(Color.argb(235, 7, 14, 29))
+        }
+        val parts = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        addButton(parts, "+ TANK") {
+            gameView.renderer.tankCount = (gameView.renderer.tankCount + 1).coerceAtMost(5)
+            updateAssemblyStatus()
+        }
+        addButton(parts, "+ ENGINE") {
+            gameView.renderer.engineCount = (gameView.renderer.engineCount + 1).coerceAtMost(5)
+            updateAssemblyStatus()
+        }
+        addButton(parts, "+ CAPSULE") {
+            gameView.renderer.hasCapsule = true
+            updateAssemblyStatus()
+        }
+        addButton(parts, "+ FIN") {
+            gameView.renderer.finCount = (gameView.renderer.finCount + 1).coerceAtMost(8)
+            updateAssemblyStatus()
+        }
+        addButton(parts, "RESET") {
+            gameView.renderer.tankCount = 1
+            gameView.renderer.engineCount = 1
+            gameView.renderer.hasCapsule = true
+            gameView.renderer.finCount = 4
+            gameView.renderer.launching = false
+            updateAssemblyStatus()
+        }
+        bottomPanel.addView(parts, LinearLayout.LayoutParams(-1, dp(44)))
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(dp(8), dp(6), dp(8), dp(6))
-            setBackgroundColor(Color.argb(225, 7, 14, 29))
         }
         addButton(controls, "BUILD") {
             gameView.renderer.scene = 0
@@ -69,13 +101,19 @@ class MainActivity : Activity() {
             gameView.renderer.launching = !gameView.renderer.launching
             status.text = if (gameView.renderer.launching) "ENGINE IGNITION  •  THRUST ENABLED" else "ENGINE CUTOFF  •  VEHICLE COASTING"
         }
-        root.addView(controls, FrameLayout.LayoutParams(-1, dp(62), Gravity.BOTTOM))
+        bottomPanel.addView(controls, LinearLayout.LayoutParams(-1, dp(48)))
+        root.addView(bottomPanel, FrameLayout.LayoutParams(-1, dp(98), Gravity.BOTTOM))
+        updateAssemblyStatus()
         setContentView(root)
+    }
+
+    private fun updateAssemblyStatus() {
+        status.text = "NATIVE VAB  •  TANKS ${gameView.renderer.tankCount}  •  ENGINES ${gameView.renderer.engineCount}  •  FINS ${gameView.renderer.finCount}"
     }
 
     private fun addButton(parent: LinearLayout, label: String, action: () -> Unit) {
         val b = Button(this).apply {
-            text = label; textSize = 11f; isAllCaps = false
+            text = label; textSize = 10f; isAllCaps = false
             setTextColor(Color.WHITE)
             setBackgroundTintList(android.content.res.ColorStateList.valueOf(
                 if (label.startsWith("LAUNCH")) Color.rgb(0, 170, 100) else Color.rgb(28, 43, 66)
