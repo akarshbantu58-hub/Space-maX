@@ -1,0 +1,119 @@
+name: Space-maX Clean Native Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - godot-foundation
+      - godot-step2-step3
+      - clean-native-rebuild
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  export-android:
+    name: Validate and export clean Godot Android APK
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.4.1
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Check toolchain
+        shell: bash
+        run: |
+          set -euxo pipefail
+          godot --headless --version
+          java -version
+          echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset}"
+          command -v keytool
+
+      - name: Install validation and download utilities
+        shell: bash
+        run: |
+          set -euxo pipefail
+          apt-get update
+          apt-get install -y --no-install-recommends curl python3
+
+      - name: Install Android SDK platform and build tools
+        shell: bash
+        run: |
+          set -euxo pipefail
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/lib/android-sdk}}"
+          command -v sdkmanager
+          yes | sdkmanager --sdk_root="${SDK_ROOT}" --licenses >/dev/null
+          sdkmanager --sdk_root="${SDK_ROOT}" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          test -d "${SDK_ROOT}/build-tools/35.0.0"
+          test -d "${SDK_ROOT}/platforms/android-35"
+
+      - name: Validate clean rebuild content catalog
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 tools/validate_catalog.py
+
+      - name: Install matching Godot Android export templates
+        shell: bash
+        run: |
+          set -euxo pipefail
+          VERSION="4.4.1"
+          URL="https://github.com/godotengine/godot/releases/download/${VERSION}-stable/Godot_v${VERSION}-stable_export_templates.tpz"
+          curl --fail --location --retry 3 "${URL}" --output /tmp/godot-templates.tpz
+          mkdir -p /tmp/godot-templates "${HOME}/.local/share/godot/export_templates/${VERSION}.stable"
+          unzip -q /tmp/godot-templates.tpz -d /tmp/godot-templates
+          cp /tmp/godot-templates/templates/* "${HOME}/.local/share/godot/export_templates/${VERSION}.stable/"
+          test -s "${HOME}/.local/share/godot/export_templates/${VERSION}.stable/android_debug.apk"
+          test -s "${HOME}/.local/share/godot/export_templates/${VERSION}.stable/android_release.apk"
+
+      - name: Configure Android SDK and debug signing
+        shell: bash
+        run: |
+          set -euxo pipefail
+          JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")"
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/lib/android-sdk}}"
+          test -d "${SDK_ROOT}"
+          mkdir -p "${HOME}/.android" "${HOME}/.config/godot"
+          keytool -genkeypair -noprompt -v \
+            -keystore "${HOME}/.android/debug.keystore" \
+            -storepass android -alias androiddebugkey -keypass android \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+          cat > "${HOME}/.config/godot/editor_settings-4.tres" <<EOF
+          [gd_resource type="EditorSettings" format=3]
+          [resource]
+          export/android/android_sdk_path = "${SDK_ROOT}"
+          export/android/java_sdk_path = "${JAVA_HOME}"
+          export/android/debug_keystore = "${HOME}/.android/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_password = "android"
+          EOF
+
+      - name: Import and validate Godot project
+        shell: bash
+        run: |
+          set -euxo pipefail
+          godot --headless --editor --path godot-game --quit
+
+      - name: Export Android debug APK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p godot-game/build
+          godot --headless --path godot-game --export-debug "Android" godot-game/build/Space-maX.apk
+          test -s godot-game/build/Space-maX.apk
+          file godot-game/build/Space-maX.apk
+          sha256sum godot-game/build/Space-maX.apk
+
+      - name: Upload clean rebuild APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Space-maX-Clean-Native-Android-debug
+          path: godot-game/build/Space-maX.apk
+          if-no-files-found: error
+          retention-days: 14
