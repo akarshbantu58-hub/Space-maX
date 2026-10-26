@@ -7,6 +7,7 @@ This folder begins the Godot 4 migration track for Space-maX. It is a native And
 - Godot 4 project configured for the mobile-friendly Compatibility renderer.
 - A menu scene and a separate 3D scene.
 - Initial procedural 3D rocket and planet placeholder geometry.
+- First playable flight-test controls: hold-to-thrust, left/right steering, fuel consumption, gravity, vertical speed and altitude readouts, and reset.
 - Auto, portrait, and landscape orientation controls in the menu.
 - An Android export preset targeting 64-bit ARM devices.
 - A GitHub Actions workflow to attempt a repeatable debug APK export.
