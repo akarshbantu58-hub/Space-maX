@@ -26,6 +26,8 @@ class SpaceRenderer : GLSurfaceView.Renderer {
     @Volatile var fuelPercent = 100f
     @Volatile var verticalVelocity = 0f
     @Volatile var altitudeMeters = 0f
+    @Volatile var horizontalVelocity = 0f
+    @Volatile var orbitMode = false
     @Volatile var stageSeparated = false
     private var width = 1
     private var height = 1
@@ -89,9 +91,14 @@ class SpaceRenderer : GLSurfaceView.Renderer {
                 fuelPercent = (fuelPercent - burnRate * dt).coerceAtLeast(0f)
             }
             val thrustAcceleration = if (launching && fuelPercent > 0f) engineCount.coerceIn(1, 5) * 9.5f else 0f
-            val gravity = 9.81f
+            val gravity = if (orbitMode) 0.04f else 9.81f
             verticalVelocity += (thrustAcceleration - gravity) * dt
             altitudeMeters = (altitudeMeters + verticalVelocity * dt).coerceAtLeast(0f)
+            if (orbitMode) {
+                horizontalVelocity = (horizontalVelocity + 0.002f).coerceAtMost(7.8f)
+                verticalVelocity *= 0.995f
+                altitudeMeters = altitudeMeters.coerceAtLeast(120_000f)
+            }
             if (altitudeMeters <= 0f && verticalVelocity < 0f) verticalVelocity = 0f
             if (fuelPercent <= 0f) launching = false
         }
@@ -114,6 +121,12 @@ class SpaceRenderer : GLSurfaceView.Renderer {
         draw("sphere", planetX - 0.13f, 0.82f, -2.05f, planetScale * 0.91f, planetScale * 0.91f, planetScale * 0.91f, floatArrayOf(0.12f, 0.52f, 0.76f, 1f))
 
         if (scene != 2) {
+            if (orbitMode) {
+                for (i in 0 until 48) {
+                    val a = i * (Math.PI * 2.0 / 48.0)
+                    draw("sphere", (cos(a) * 2.2).toFloat(), (sin(a) * 0.62 + 0.15).toFloat(), -0.8f, 0.025f, 0.025f, 0.025f, floatArrayOf(0.1f, 0.9f, 1f, 1f))
+                }
+            }
             val lift = (altitudeMeters / 180f).coerceIn(0f, 4.5f)
             val y = -0.15f + lift
             for (tank in (if (stageSeparated) 1 else 0) until tankCount.coerceIn(1, 5)) {
