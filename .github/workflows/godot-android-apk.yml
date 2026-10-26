@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - godot-foundation
+      - godot-step2-step3
   pull_request:
     branches:
       - main
@@ -22,16 +23,65 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Check Godot version
-        run: godot --headless --version
+      - name: Check toolchain
+        shell: bash
+        run: |
+          set -euxo pipefail
+          godot --headless --version
+          java -version
+          echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset}"
+          command -v keytool
 
-      - name: Import project resources
-        run: godot --headless --editor --path godot-game --quit
+      - name: Install matching Godot Android export templates
+        shell: bash
+        run: |
+          set -euxo pipefail
+          VERSION="4.4.1"
+          URL="https://github.com/godotengine/godot/releases/download/${VERSION}-stable/Godot_v${VERSION}-stable_export_templates.tpz"
+          curl --fail --location --retry 3 "${URL}" --output /tmp/godot-templates.tpz
+          mkdir -p /tmp/godot-templates "${HOME}/.local/share/godot/export_templates/${VERSION}.stable"
+          unzip -q /tmp/godot-templates.tpz -d /tmp/godot-templates
+          cp /tmp/godot-templates/templates/* "${HOME}/.local/share/godot/export_templates/${VERSION}.stable/"
+          test -s "${HOME}/.local/share/godot/export_templates/${VERSION}.stable/android_debug.apk"
+          test -s "${HOME}/.local/share/godot/export_templates/${VERSION}.stable/android_release.apk"
+
+      - name: Configure Android SDK and debug signing
+        shell: bash
+        run: |
+          set -euxo pipefail
+          JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")"
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/lib/android-sdk}}"
+          test -d "${SDK_ROOT}"
+          mkdir -p "${HOME}/.android" "${HOME}/.config/godot"
+          keytool -genkeypair -noprompt -v \
+            -keystore "${HOME}/.android/debug.keystore" \
+            -storepass android -alias androiddebugkey -keypass android \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+          cat > "${HOME}/.config/godot/editor_settings-4.tres" <<EOF
+          [gd_resource type="EditorSettings" format=3]
+          [resource]
+          export/android/android_sdk_path = "${SDK_ROOT}"
+          export/android/java_sdk_path = "${JAVA_HOME}"
+          EOF
+          echo "Using Android SDK at ${SDK_ROOT}"
+          echo "Using Java at ${JAVA_HOME}"
+
+      - name: Import and validate project
+        shell: bash
+        run: |
+          set -euxo pipefail
+          godot --headless --editor --path godot-game --quit
 
       - name: Export Android debug APK
+        shell: bash
         run: |
+          set -euxo pipefail
           mkdir -p godot-game/build
           godot --headless --path godot-game --export-debug "Android" godot-game/build/Space-maX.apk
+          test -s godot-game/build/Space-maX.apk
+          file godot-game/build/Space-maX.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
