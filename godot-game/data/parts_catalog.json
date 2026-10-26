@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "status": "starter_catalog_not_final_content",
+  "parts": [
+    {"id": "tank_small", "name": "Small Fuel Tank", "category": "fuel_tank", "mass_kg": 120, "fuel_units": 100},
+    {"id": "engine_basic", "name": "Basic Engine", "category": "engine", "mass_kg": 85, "thrust_kn": 180, "isp_s": 260},
+    {"id": "nose_cone", "name": "Nose Cone", "category": "aerodynamic", "mass_kg": 18},
+    {"id": "decoupler_small", "name": "Small Decoupler", "category": "staging", "mass_kg": 12},
+    {"id": "solar_panel", "name": "Solar Panel", "category": "utility", "mass_kg": 8}
+  ],
+  "planets": [
+    {"id": "earth", "name": "Earth", "radius_km": 6371, "mu_km3_s2": 398600.4418},
+    {"id": "moon", "name": "Moon", "radius_km": 1737.4, "mu_km3_s2": 4902.8001},
+    {"id": "mars", "name": "Mars", "radius_km": 3389.5, "mu_km3_s2": 42828.375}
+  ]
+}
