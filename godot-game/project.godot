@@ -1,9 +1,9 @@
-; Space-maX — Godot 4 foundation
+; Space-maX — clean native 3D rebuild
 config_version=5
 
 [application]
 config/name="Space-maX"
-config/description="A native 3D spaceflight game foundation for Android."
+config/description="Clean native 3D spaceflight game rebuild. No web runtime is packaged."
 run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.4", "GL Compatibility")
 
