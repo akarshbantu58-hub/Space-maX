@@ -82,6 +82,8 @@ class MainActivity : Activity() {
             gameView.renderer.fuelPercent = 100f
             gameView.renderer.verticalVelocity = 0f
             gameView.renderer.altitudeMeters = 0f
+            gameView.renderer.horizontalVelocity = 0f
+            gameView.renderer.orbitMode = false
             gameView.renderer.stageSeparated = false
             updateAssemblyStatus()
         }
@@ -101,6 +103,15 @@ class MainActivity : Activity() {
         addButton(controls, "PLANETS") {
             gameView.renderer.scene = 2
             status.text = "PLANET VIEW  •  PROCEDURAL SPHERE PREVIEW"
+        }
+        addButton(controls, "ORBIT") {
+            gameView.renderer.orbitMode = true
+            gameView.renderer.simActive = true
+            gameView.renderer.launching = false
+            gameView.renderer.horizontalVelocity = 7.8f
+            gameView.renderer.altitudeMeters = 120_000f
+            gameView.renderer.verticalVelocity = 0f
+            status.text = "ORBIT MODE • 120 KM TARGET • TRAJECTORY DISPLAY"
         }
         addButton(controls, "STAGE") {
             gameView.renderer.stageSeparated = true
