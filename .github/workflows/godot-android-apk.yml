@@ -33,10 +33,12 @@ jobs:
           echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset}"
           command -v keytool
 
-      - name: Install matching Godot Android export templates
+      - name: Install download utility and matching Godot Android export templates
         shell: bash
         run: |
           set -euxo pipefail
+          apt-get update
+          apt-get install -y --no-install-recommends curl
           VERSION="4.4.1"
           URL="https://github.com/godotengine/godot/releases/download/${VERSION}-stable/Godot_v${VERSION}-stable_export_templates.tpz"
           curl --fail --location --retry 3 "${URL}" --output /tmp/godot-templates.tpz
